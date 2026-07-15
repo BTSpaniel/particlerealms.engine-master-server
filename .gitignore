@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.pytest_cache/
+.coverage
+.tox/
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+
+# Secrets / local runtime config
+.env
+.env.*
+*.local
+cloudflared/config.yml
+systemd/*.local.service
+
+# Tooling
+.deepeval/
+.vscode/
+.idea/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db

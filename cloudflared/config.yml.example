@@ -1,0 +1,23 @@
+# Cloudflare Tunnel config for the Particle Masterserver.
+# Copy to /etc/cloudflared/config.yml (or ~/.cloudflared/config.yml) and
+# fill in your own tunnel id / credentials file / hostname.
+#
+# Setup (run once):
+#   cloudflared tunnel login
+#   cloudflared tunnel create particle-masterserver
+#   cloudflared tunnel route dns particle-masterserver discovery.<your-domain>
+#
+# Then install as a service so it survives reboot:
+#   sudo cloudflared service install
+#   sudo systemctl enable --now cloudflared
+
+tunnel: <TUNNEL_ID>
+credentials-file: /home/<user>/.cloudflared/<TUNNEL_ID>.json
+
+ingress:
+  # WebSocket upgrade is transparent through Cloudflare Tunnel — no special
+  # config needed beyond pointing at the local uvicorn port.
+  - hostname: discovery.<your-domain>
+    service: http://127.0.0.1:8080
+  # Catch-all (required — cloudflared refuses to start without one).
+  - service: http_status:404

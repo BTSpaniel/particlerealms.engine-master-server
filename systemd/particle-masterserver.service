@@ -1,0 +1,37 @@
+# SPDX-FileCopyrightText: 2026 Jake Wehmeier (BTSpaniel) <https://github.com/BTSpaniel>
+#
+# SPDX-License-Identifier: LicenseRef-ParticleRealms-Alpha
+
+[Unit]
+Description=Particle Masterserver (discovery/signaling relay)
+After=network.target
+
+[Service]
+Type=simple
+User=particle
+Group=particle
+WorkingDirectory=/opt/particle-masterserver
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/python3 -m uvicorn app.main:app \
+    --app-dir /opt/particle-masterserver \
+    --host 127.0.0.1 \
+    --port 8080 \
+    --workers 1 \
+    --ws websockets \
+    --ws-max-size 65536 \
+    --ws-ping-interval 25 \
+    --ws-ping-timeout 20 \
+    --limit-concurrency 128 \
+    --no-access-log
+Restart=on-failure
+RestartSec=2
+
+# Hardening (safe defaults for a small, no-DB, no-file-write network service)
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=
+
+[Install]
+WantedBy=multi-user.target
