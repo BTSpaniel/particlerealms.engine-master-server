@@ -4,7 +4,7 @@
 # SPDX-License-Identifier: LicenseRef-ParticleRealms-Alpha
 
 # Particle Masterserver - Installer (Linux/macOS)
-# Installs dependencies directly with the system Python (no virtual environment).
+# Creates an isolated virtual environment and installs the hash-locked runtime.
 # Run this once (or again after requirements.txt changes). Use ./start.sh to run the server.
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -24,23 +24,28 @@ if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
     exit 1
 fi
 
-echo "Installing dependencies..."
-if ! "$PYTHON_BIN" -m pip install --upgrade pip 2>/tmp/particle-pip-err.$$ || \
-   ! "$PYTHON_BIN" -m pip install -r requirements.txt 2>>/tmp/particle-pip-err.$$; then
-    if grep -qi "externally-managed-environment" /tmp/particle-pip-err.$$ 2>/dev/null; then
-        echo
-        echo "System Python is externally-managed (PEP 668) — retrying with"
-        echo "--break-system-packages instead of creating a virtual environment."
-        echo
-        "$PYTHON_BIN" -m pip install --upgrade pip --break-system-packages
-        "$PYTHON_BIN" -m pip install -r requirements.txt --break-system-packages
-    else
-        cat /tmp/particle-pip-err.$$ >&2
-        rm -f /tmp/particle-pip-err.$$
-        exit 1
-    fi
+echo "Creating isolated Python environment..."
+"$PYTHON_BIN" -m venv .venv
+echo "Installing hash-verified dependencies..."
+ARCH="$(uname -m)"
+PYTHON_VERSION="$(.venv/bin/python -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
+LOCK_ARGS=(-r requirements.lock)
+if [[ "$ARCH" == "aarch64" ]]; then
+    case "$PYTHON_VERSION" in
+        3.12)
+            LOCK_ARGS=(-r requirements-pi.lock)
+            ;;
+        3.13)
+            LOCK_ARGS=(-r requirements.lock -r requirements-pi313-uvloop.lock)
+            ;;
+        *)
+            echo "Error: no hash lock is available for Linux aarch64 CPython $PYTHON_VERSION."
+            echo "Use CPython 3.12 or 3.13; refusing an unverified dependency install."
+            exit 1
+            ;;
+    esac
 fi
-rm -f /tmp/particle-pip-err.$$
+.venv/bin/python -m pip install --require-hashes --only-binary=:all: "${LOCK_ARGS[@]}"
 
 echo
 echo "======================================"

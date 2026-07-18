@@ -5,6 +5,7 @@
 [Unit]
 Description=Particle Masterserver (discovery/signaling relay)
 After=network.target
+StartLimitIntervalSec=60
 
 [Service]
 Type=simple
@@ -12,19 +13,39 @@ User=particle
 Group=particle
 WorkingDirectory=/opt/particle-masterserver
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/usr/bin/python3 -m uvicorn app.main:app \
+EnvironmentFile=-/etc/particle-masterserver.env
+ExecStart=/opt/particle-masterserver/.venv/bin/python -m uvicorn app.main:app \
     --app-dir /opt/particle-masterserver \
     --host 127.0.0.1 \
     --port 8080 \
     --workers 1 \
     --ws websockets \
     --ws-max-size 65536 \
+    --ws-max-queue 16 \
     --ws-ping-interval 25 \
     --ws-ping-timeout 20 \
-    --limit-concurrency 128 \
+    --ws-per-message-deflate false \
+    --limit-concurrency 192 \
+    --backlog 256 \
+    --proxy-headers \
+    --forwarded-allow-ips 127.0.0.1 \
+    --timeout-graceful-shutdown 20 \
+    --no-server-header \
     --no-access-log
 Restart=on-failure
-RestartSec=2
+RestartSec=5
+StartLimitBurst=5
+TimeoutStopSec=20
+KillSignal=SIGTERM
+MemoryHigh=512M
+MemoryMax=640M
+MemorySwapMax=256M
+TasksMax=256
+LimitNOFILE=1024
+StandardOutput=journal
+StandardError=journal
+LogRateLimitIntervalSec=30s
+LogRateLimitBurst=1000
 
 # Hardening (safe defaults for a small, no-DB, no-file-write network service)
 NoNewPrivileges=true
@@ -32,6 +53,26 @@ PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
 ReadWritePaths=
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ProtectKernelLogs=true
+ProtectProc=invisible
+ProcSubset=pid
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+PrivateDevices=true
+ProtectClock=true
+ProtectHostname=true
+RestrictNamespaces=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+SystemCallArchitectures=native
+CapabilityBoundingSet=
+AmbientCapabilities=
+RemoveIPC=true
+KeyringMode=private
+UMask=0077
 
 [Install]
 WantedBy=multi-user.target

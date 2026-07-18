@@ -2,13 +2,13 @@
 #
 # SPDX-License-Identifier: LicenseRef-ParticleRealms-Alpha
 
-"""
-Masterserver/app/canonical.py — deterministic JSON serialization + content
-hashing, used only for the internal dedupe cache key (network plan §29).
-Does not need to byte-match the JS client's canonicalization (that matters
-only where signatures cross the wire, and the server never verifies
-peer-to-peer signatures — network plan §12) — it only needs to be
-deterministic for THIS process's own dedupe decisions.
+"""Deterministic JSON for signatures, manifests, and dedupe keys.
+
+Every cross-runtime signed schema is restricted to objects, arrays, strings,
+booleans, and safe integer epoch/sequence values. Under that deliberately
+small domain this encoding byte-matches ``Trust.js``: sorted object keys,
+UTF-8 text, and no insignificant whitespace. Floats are never accepted in a
+signed wire schema.
 """
 
 import hashlib

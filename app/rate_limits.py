@@ -42,10 +42,15 @@ class RateLimiterRegistry:
     """
 
     DEFAULTS = {
+        "MESSAGE": (128.0, 64.0),
         "ATTACH_ROUTE": (4.0, 4.0 / 60.0),
-        "SIGNAL": (30.0, 10.0),
+        "SIGNAL": (40.0, 20.0),
+        "SIGNAL_V2": (40.0, 20.0),
         "FORWARD": (10.0, 5.0),
+        "DISCOVER": (10.0, 2.0),
         "HEARTBEAT": (1.0, 1.0 / 20.0),
+        # A proof is deliberately not refillable within one socket lifetime.
+        "PROVE": (3.0, 0.0),
     }
 
     def __init__(self):

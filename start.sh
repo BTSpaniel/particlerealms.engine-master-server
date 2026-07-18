@@ -5,16 +5,16 @@
 
 # Particle Masterserver - Launcher (Linux/macOS)
 # Runs the server with the network-plan-recommended uvicorn flags
-# (single worker, capped frame size, no access log), using the system
-# Python (no virtual environment). Override the bind address/port with
+# (single worker, capped frame size, no access log), using the isolated
+# environment created by install.sh. Override the bind address/port with
 # the PARTICLE_HOST / PARTICLE_PORT env vars.
 set -euo pipefail
 cd "$(dirname "$0")"
 
-PYTHON_BIN="${PYTHON_BIN:-python3}"
+PYTHON_BIN="${PARTICLE_VENV_PYTHON:-.venv/bin/python}"
 
-if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
-    echo "Error: '$PYTHON_BIN' not found on PATH. Run ./install.sh first, or install Python 3.11+."
+if [[ ! -x "$PYTHON_BIN" ]]; then
+    echo "Error: '$PYTHON_BIN' is unavailable. Run ./install.sh first."
     exit 1
 fi
 
@@ -32,5 +32,8 @@ echo
 exec "$PYTHON_BIN" -m uvicorn app.main:app \
     --host "$PARTICLE_HOST" --port "$PARTICLE_PORT" \
     --workers 1 --ws websockets \
-    --ws-max-size 65536 --ws-ping-interval 25 --ws-ping-timeout 20 \
-    --limit-concurrency 128 --no-access-log
+    --ws-max-size 65536 --ws-max-queue 16 --ws-ping-interval 25 --ws-ping-timeout 20 \
+    --ws-per-message-deflate false --limit-concurrency 192 \
+    --backlog 256 \
+    --proxy-headers --forwarded-allow-ips 127.0.0.1 \
+    --timeout-graceful-shutdown 20 --no-server-header --no-access-log

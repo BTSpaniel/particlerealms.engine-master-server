@@ -16,10 +16,27 @@ from app.hub import Hub
 from app.main import create_app
 
 
-def test_public_surface_is_exactly_healthz_readyz_and_ws():
+def test_public_surface_is_exactly_versioned_particle_interfaces():
     app = create_app(Config())
-    paths = {route.path for route in app.routes if hasattr(route, "path")}
-    assert paths == {"/healthz", "/readyz", "/v1/ws"}, f"unexpected public surface: {paths}"
+    # FastAPI 0.139+ keeps included routers as lazy wrappers. Walk their
+    # original router tables so this security invariant covers HTTP and WS
+    # routes on both lazy and eagerly flattened FastAPI releases.
+    def collect_paths(routes):
+        paths = set()
+        for route in routes:
+            path = getattr(route, "path", None)
+            if isinstance(path, str):
+                paths.add(path)
+            original = getattr(route, "original_router", None)
+            if original is not None:
+                paths.update(collect_paths(original.routes))
+        return paths
+
+    paths = collect_paths(app.router.routes)
+    assert paths == {
+        "/healthz", "/readyz", "/status", "/metrics", "/v1/ws",
+        "/v2/manifest", "/v2/admission", "/v2/turn", "/v2/ws", "/v2/node",
+    }, f"unexpected public surface: {paths}"
 
 
 def test_interactive_docs_are_disabled():

@@ -54,6 +54,18 @@ def test_hello_prove_flow_succeeds_with_a_genuine_signature():
         _hello_and_prove(ws)
 
 
+def test_proven_v1_session_cannot_restart_the_proof_state_machine():
+    with _client().websocket_connect("/v1/ws") as ws:
+        _hello_and_prove(ws)
+        _, raw_point = _make_keypair()
+        ws.send_json({
+            "protocol": PROTOCOL_VERSIONS["SESSION"], "type": "HELLO",
+            "payload": {"publicKeyHex": raw_point.hex()},
+        })
+        response = ws.receive_json()
+        assert response["type"] == "ERROR" and response["code"] == "invalid-state"
+
+
 def test_prove_fails_with_a_bad_signature():
     with _client().websocket_connect("/v1/ws") as ws:
         _, raw_point = _make_keypair()
@@ -62,6 +74,25 @@ def test_prove_fails_with_a_bad_signature():
         ws.send_json({"protocol": PROTOCOL_VERSIONS["SESSION"], "type": "PROVE", "payload": {"signatureHex": bytes(64).hex()}})
         resp = ws.receive_json()
         assert resp["type"] == "ERROR" and resp["code"] == "prove-failed"
+
+
+def test_v1_closes_after_three_failed_proof_verifications():
+    with _client().websocket_connect("/v1/ws") as ws:
+        _, raw_point = _make_keypair()
+        ws.send_json({
+            "protocol": PROTOCOL_VERSIONS["SESSION"], "type": "HELLO",
+            "payload": {"publicKeyHex": raw_point.hex()},
+        })
+        ws.receive_json()
+        bad_prove = {
+            "protocol": PROTOCOL_VERSIONS["SESSION"], "type": "PROVE",
+            "payload": {"signatureHex": bytes(64).hex()},
+        }
+        for _ in range(3):
+            ws.send_json(bad_prove)
+            assert ws.receive_json()["code"] == "prove-failed"
+        ws.send_json(bad_prove)
+        assert ws.receive_json()["code"] == "rate-limited"
 
 
 def test_unproven_session_cannot_attach_a_route():
@@ -80,6 +111,13 @@ def test_reconnect_as_a_fresh_session_still_requires_its_own_proof():
         ws2.send_json({"protocol": PROTOCOL_VERSIONS["ROUTE"], "type": "ATTACH_ROUTE", "payload": {"routeId": "r1"}})
         resp = ws2.receive_json()
         assert resp["type"] == "ERROR" and resp["code"] == "not-proven"
+
+
+def test_silent_v1_client_hits_independent_proof_deadline():
+    client = TestClient(create_app(Config(proof_deadline_seconds=0.02)))
+    with client.websocket_connect("/v1/ws") as ws:
+        response = ws.receive_json()
+        assert response["type"] == "ERROR" and response["code"] == "proof-timeout"
 
 
 def test_signal_relays_to_route_subscribers_with_ttl_decrement():
@@ -142,6 +180,23 @@ def test_discover_lists_other_route_subscribers_excluding_self():
         resp = ws_a.receive_json()
         assert resp["type"] == "PEERS"
         assert len(resp["payload"]["peers"]) == 1
+
+
+def test_v1_discovery_and_signaling_require_route_membership():
+    with _client().websocket_connect("/v1/ws") as ws:
+        _hello_and_prove(ws)
+        ws.send_json({
+            "protocol": PROTOCOL_VERSIONS["ROUTE"], "type": "DISCOVER",
+            "payload": {"routeId": "not-attached"},
+        })
+        response = ws.receive_json()
+        assert response["type"] == "ERROR" and response["code"] == "not-attached"
+        ws.send_json({
+            "protocol": PROTOCOL_VERSIONS["SIGNAL"], "type": "SIGNAL",
+            "payload": {"routeId": "not-attached", "ttl": 4, "offer": "blocked"},
+        })
+        response = ws.receive_json()
+        assert response["type"] == "ERROR" and response["code"] == "not-attached"
 
 
 def test_oversized_frame_is_rejected():

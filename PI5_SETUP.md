@@ -4,8 +4,9 @@ Reference deployment for the default Particle Masterserver instance. This is
 a **manual, hands-on-hardware process** — run these steps yourself on the
 physical Pi (Cascade cannot execute commands on hardware it has no access to).
 
-Assumes: Raspberry Pi OS, `cloudflared` already installed and logged in
-(`cloudflared tunnel login` already run), Python 3.13 available by default.
+Assumes: 64-bit Raspberry Pi OS, `cloudflared` already installed and logged in
+(`cloudflared tunnel login` already run), and CPython 3.12. The reference Pi
+lock is ABI-specific and the installer refuses source distributions.
 
 ## 1. System prep
 
@@ -43,13 +44,14 @@ ssh pi@<pi-host> "sudo rsync -av --delete /tmp/particle-masterserver/ /opt/parti
 
 ## 4. Python environment
 
-No virtual environment — dependencies install directly against the system
-Python 3.13:
+The installer creates `/opt/particle-masterserver/.venv` and selects the
+hash-verified Linux aarch64/CPython 3.12 lock without modifying system Python.
+Set `PYTHON_BIN` explicitly if `python3` is not version 3.12:
 
 ```bash
 cd /opt/particle-masterserver
 sudo -u particle chmod +x install.sh start.sh
-sudo -u particle ./install.sh
+sudo -u particle env PYTHON_BIN=/usr/bin/python3.12 ./install.sh
 ```
 
 ## 5. Run it manually first (sanity check before installing the service)
@@ -58,17 +60,26 @@ sudo -u particle ./install.sh
 sudo -u particle env PARTICLE_HOST=127.0.0.1 PARTICLE_PORT=8080 ./start.sh
 ```
 
-In another shell: `curl -i http://127.0.0.1:8080/healthz` should return `204`.
-Ctrl+C to stop once confirmed.
+In another shell, verify `/healthz`, `/status`, and `/v2/manifest`. This manual
+sanity run uses a process-ephemeral development key; the systemd production
+configuration below requires the external persistent key. Ctrl+C to stop.
 
 ## 6. Install as a systemd service
 
 ```bash
 sudo cp systemd/particle-masterserver.service /etc/systemd/system/
+sudo cp particle-masterserver.env.example /etc/particle-masterserver.env
+sudo install -d -o particle -g particle -m 0750 /etc/particle-masterserver
+sudo -u particle .venv/bin/python generate_signing_key.py --output /etc/particle-masterserver/node-signing-key.pem
+sudo chmod 0600 /etc/particle-masterserver/node-signing-key.pem
+sudo nano /etc/particle-masterserver.env
 sudo systemctl daemon-reload
 sudo systemctl enable --now particle-masterserver
 sudo systemctl status particle-masterserver
 ```
+
+The service unit also caps the socket accept backlog, open file descriptors,
+tasks, and memory. Keep these finite; raise them only alongside a measured gate.
 
 ## 7. Cloudflare Tunnel
 
@@ -82,29 +93,58 @@ sudo cloudflared service install
 sudo systemctl enable --now cloudflared
 ```
 
+The tunnel rule deliberately returns 404 for `/v2/node`; it is a public browser
+edge, not a trusted-node edge. If node mesh is enabled, deploy the separate
+`node-discovery.example.com` nginx virtual host, issue each node a client
+certificate, generate `PARTICLE_NODE_MESH_PROXY_TOKEN` with
+`openssl rand -hex 32`, and put the same token in the installed nginx config.
+Never expose Uvicorn directly or route the node hostname through the public
+tunnel rule.
+
+Create Cloudflare WAF/rate-limit rules for `/v1/ws` and `/v2/ws` upgrade
+requests plus `/v2/admission` and `/v2/turn`. Cloudflare does not inspect
+WebSocket frames after the 101 upgrade, so the server's frame, operation,
+queue, and proof limits remain mandatory.
+
 ## 8. Verify end-to-end
 
 ```bash
 curl -i https://discovery.<your-domain>/healthz   # expect 204
 ```
 
-Open a WebSocket test client against `wss://discovery.<your-domain>/v1/ws`
-and send a `HELLO` — you should get a `HELLO` challenge back.
+Run both a two-client V1 compatibility test and a pinned V2 test with
+`tests/network/mesh_test.py`, then validate the V2 evidence offline.
+
+If this Pi also runs coturn, start from `coturn/turnserver.conf.example`, replace
+the secret/certificate/address values, set the resulting file to mode `0600`,
+and open only ports 3478, 5349, and UDP 49152-49407. Confirm allocation,
+bandwidth, and private-peer denials before running the forced-relay gate.
 
 ## 9. 1 GB RAM guardrails
 
-> Note: `install.sh`/`start.sh` install and run against the system Python
-> directly (no venv), matching the Windows scripts. If your Pi's system
-> Python is externally-managed (PEP 668), `install.sh` automatically detects
-> pip's `externally-managed-environment` error and retries with
-> `--break-system-packages` — acceptable here since `particle` is a dedicated,
-> single-purpose service account. Don't reuse this pattern on a shared/dev
-> machine.
+> The service never uses `--break-system-packages`; all dependencies live in
+> its dedicated virtual environment.
 
 - `--workers 1` only — never scale to multiple workers on this hardware.
-- `--limit-concurrency 128` — lower it (e.g. 64) if you observe memory pressure: `free -h`.
-- No database, no access log — memory stays bounded by live sessions/routes/dedupe-cache only, and fully resets on restart.
-- Watch logs (systemd journal, not app logs — the app itself logs nothing): `sudo journalctl -u particle-masterserver -f`
+- The transport admits up to 192 concurrent HTTP/WebSocket operations so 128
+  proven sessions still have headroom for admissions and metrics; the
+  application independently caps active sessions at 128.
+- WebSocket compression is disabled to avoid per-connection compression state
+  and compression-amplification surprises on a 1 GB host.
+- The origin edge stays on HTTP/1.1; Cloudflare may negotiate H2/H3 at its own
+  protected edge. Do not re-enable origin HTTP/2 without a current nginx build
+  and finite concurrent-stream/request limits.
+- Admission, TURN, signed-signal verification, pre-parse messages, proof
+  attempts, dedupe entries, socket writes, open files, RAM, and swap all have
+  independent finite budgets.
+- Node queries/acks, route registries, discovery results, descriptor caches, and
+  lease lifetimes have independent finite budgets; node shutdown clears them.
+- No database or access log; rendezvous state is ephemeral and queues are bounded.
+- Structured operational logs go to rate-limited journald:
+  `sudo journalctl -u particle-masterserver -f`.
+- Scrape loopback `/metrics` and record RSS, CPU, event-loop lag, relay p95/p99,
+  admission/proof success, queue/rate rejection, TURN issuance, and node health
+  during the 60-minute 128-client hard gate.
 
 ## 10. Updating
 
@@ -113,5 +153,6 @@ and send a `HELLO` — you should get a `HELLO` challenge back.
 sudo systemctl restart particle-masterserver
 ```
 
-Keep the previous `/opt/particle-masterserver` as a `.bak` copy before
-overwriting if you want an easy rollback path.
+Keep the previous `/opt/particle-masterserver` as a `.bak` copy. Protocol
+rollback disables V2 advertisement in the signed manifest while `/v1/ws`
+remains operational; no database migration is needed.

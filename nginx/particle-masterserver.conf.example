@@ -1,0 +1,133 @@
+# SPDX-FileCopyrightText: 2026 Jake Wehmeier (BTSpaniel) <https://github.com/BTSpaniel>
+#
+# SPDX-License-Identifier: LicenseRef-ParticleRealms-Alpha
+
+map $http_upgrade $particle_connection_upgrade {
+    default upgrade;
+    '' close;
+}
+
+# These zones belong in the nginx http context (this example is intended for
+# conf.d/). Empty sensitive keys are deliberately not counted by limit_req.
+map $uri $particle_sensitive_client {
+    default "";
+    /v2/admission $binary_remote_addr;
+    /v2/turn $binary_remote_addr;
+}
+
+limit_conn_zone $binary_remote_addr zone=particle_per_ip:10m;
+limit_conn_zone $server_name zone=particle_total:1m;
+limit_req_zone $binary_remote_addr zone=particle_general:10m rate=50r/s;
+limit_req_zone $particle_sensitive_client zone=particle_sensitive:10m rate=2r/s;
+
+server {
+    # This tiny sequential API and RFC 6455 service do not benefit materially
+    # from origin HTTP/2. Keeping the origin on HTTP/1.1 removes an unnecessary
+    # multiplexing attack surface; an upstream provider may still serve H2/H3.
+    listen 443 ssl;
+    server_name discovery.example.com;
+    access_log off;
+
+    ssl_certificate /etc/letsencrypt/live/discovery.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/discovery.example.com/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_session_cache shared:ParticleSSL:10m;
+    ssl_session_timeout 10m;
+    ssl_session_tickets off;
+
+    # Slow-header/body and request/connection exhaustion boundaries. The
+    # per-IP burst/connection values intentionally accommodate the 128-client
+    # controlled Pi gate behind one NAT while still placing a finite ceiling.
+    client_max_body_size 64k;
+    client_header_timeout 10s;
+    client_body_timeout 10s;
+    keepalive_timeout 10s;
+    keepalive_requests 100;
+    send_timeout 10s;
+    large_client_header_buffers 2 4k;
+    reset_timedout_connection on;
+    limit_conn_status 429;
+    limit_req_status 429;
+    limit_req_log_level notice;
+    limit_conn particle_per_ip 160;
+    limit_conn particle_total 256;
+    limit_req zone=particle_general burst=384 nodelay;
+    limit_req zone=particle_sensitive burst=128 nodelay;
+
+    location = /metrics {
+        return 404;
+    }
+
+    location = /v2/node {
+        return 404;
+    }
+
+    location / {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_connect_timeout 3s;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $particle_connection_upgrade;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-SSL-Client-Verify "";
+        proxy_set_header X-Particle-Node-Proxy-Token "";
+        proxy_read_timeout 90s;
+        proxy_send_timeout 10s;
+    }
+}
+
+# Node links use a separate TLS virtual host so ordinary browser clients are
+# never asked for a client certificate. Publish this hostname only to trusted
+# nodes; do not place it behind the public cloudflared rule shown elsewhere.
+server {
+    listen 443 ssl;
+    server_name node-discovery.example.com;
+    access_log off;
+
+    ssl_certificate /etc/letsencrypt/live/node-discovery.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/node-discovery.example.com/privkey.pem;
+    ssl_client_certificate /etc/particle-masterserver/node-mesh-ca.pem;
+    ssl_verify_client on;
+    ssl_verify_depth 2;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_session_cache shared:ParticleNodeSSL:2m;
+    ssl_session_timeout 5m;
+    ssl_session_tickets off;
+
+    client_max_body_size 64k;
+    client_header_timeout 10s;
+    client_body_timeout 10s;
+    keepalive_timeout 10s;
+    keepalive_requests 100;
+    send_timeout 10s;
+    large_client_header_buffers 2 4k;
+    reset_timedout_connection on;
+    limit_conn_status 429;
+    limit_req_status 429;
+    limit_conn particle_per_ip 16;
+    limit_conn particle_total 256;
+    limit_req zone=particle_general burst=32 nodelay;
+
+    location = /v2/node {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_connect_timeout 3s;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $particle_connection_upgrade;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-SSL-Client-Verify $ssl_client_verify;
+        # Must exactly match PARTICLE_NODE_MESH_PROXY_TOKEN and remain outside
+        # source control in the installed configuration.
+        proxy_set_header X-Particle-Node-Proxy-Token replace-with-a-random-proxy-attestation-token;
+        proxy_read_timeout 90s;
+        proxy_send_timeout 10s;
+    }
+
+    location / {
+        return 404;
+    }
+}

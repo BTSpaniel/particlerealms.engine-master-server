@@ -15,8 +15,17 @@ tunnel: <TUNNEL_ID>
 credentials-file: /home/<user>/.cloudflared/<TUNNEL_ID>.json
 
 ingress:
-  # WebSocket upgrade is transparent through Cloudflare Tunnel — no special
-  # config needed beyond pointing at the local uvicorn port.
+  # WebSocket upgrade is transparent through Cloudflare Tunnel. Configure
+  # Cloudflare WAF/rate-limit rules for /v1/ws and /v2/ws upgrade requests and
+  # /v2/admission + /v2/turn. Cloudflare only evaluates the initial HTTP 101
+  # request; established WebSocket frames remain protected by the application's
+  # message, rate, queue, proof-deadline, and concurrency limits.
+  # The public tunnel is not an mTLS node edge. Reject this path before the
+  # general hostname rule so a forged proxy-verification header cannot reach
+  # Uvicorn. Trusted nodes use the separate nginx mTLS hostname instead.
+  - hostname: discovery.<your-domain>
+    path: ^/v2/node$
+    service: http_status:404
   - hostname: discovery.<your-domain>
     service: http://127.0.0.1:8080
   # Catch-all (required — cloudflared refuses to start without one).

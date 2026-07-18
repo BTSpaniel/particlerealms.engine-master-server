@@ -1,4 +1,9 @@
-fastapi>=0.110
-uvicorn[standard]>=0.29
-websockets>=12.0
-cryptography>=42.0
+fastapi==0.139.2
+uvicorn==0.51.0
+websockets==16.1
+cryptography==49.0.0
+httptools==0.8.0
+python-dotenv==1.2.2
+PyYAML==6.0.3
+watchfiles==1.2.0
+uvloop==0.22.1; platform_system != "Windows"

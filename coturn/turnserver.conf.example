@@ -1,0 +1,70 @@
+# SPDX-FileCopyrightText: 2026 Jake Wehmeier (BTSpaniel) <https://github.com/BTSpaniel>
+#
+# SPDX-License-Identifier: LicenseRef-ParticleRealms-Alpha
+
+# Particle TURN reference. Copy to /etc/turnserver.conf, replace the realm,
+# secret, public/private address mapping, and certificate paths, then keep the
+# resulting file mode 0600. The relay-port range must also be allowed by the
+# host firewall/NAT.
+listening-port=3478
+tls-listening-port=5349
+min-port=49152
+max-port=49407
+
+realm=turn.example.com
+server-name=turn.example.com
+use-auth-secret
+static-auth-secret=replace-with-the-particle-turn-rest-secret
+fingerprint
+stale-nonce=600
+
+# Allocation and bandwidth ceilings sized for the 128-client Pi gate. Tune
+# only from measured relay traffic; these remain independent of masterserver
+# admission limits.
+user-quota=4
+total-quota=128
+max-bps=2000000
+bps-capacity=64000000
+max-allocate-timeout=10
+
+# WebRTC needs UDP relay allocations but not RFC 6062 TCP relay endpoints.
+# TURN-over-TCP/TLS listeners remain available for restrictive networks.
+no-tcp-relay
+no-dtls
+no-tlsv1
+no-tlsv1_1
+no-rfc5780
+no-multicast-peers
+no-cli
+check-origin-consistency
+
+# Prevent authenticated TURN clients from reaching addresses that are private
+# to the relay host or its provider network. Loopback is denied by coturn's
+# production default; these ranges cover the remaining IPv4 special/private
+# networks commonly reachable from a hosted origin.
+denied-peer-ip=0.0.0.0-0.255.255.255
+denied-peer-ip=10.0.0.0-10.255.255.255
+denied-peer-ip=100.64.0.0-100.127.255.255
+denied-peer-ip=169.254.0.0-169.254.255.255
+denied-peer-ip=172.16.0.0-172.31.255.255
+denied-peer-ip=192.0.0.0-192.0.0.255
+denied-peer-ip=192.168.0.0-192.168.255.255
+denied-peer-ip=198.18.0.0-198.19.255.255
+denied-peer-ip=224.0.0.0-255.255.255.255
+# IPv6 loopback, ULA, link-local, and multicast. Remove only the exact range
+# your deployment intentionally relays to after testing the network boundary.
+denied-peer-ip=::1
+denied-peer-ip=fc00::-fdff:ffff:ffff:ffff:ffff:ffff:ffff:ffff
+denied-peer-ip=fe80::-febf:ffff:ffff:ffff:ffff:ffff:ffff:ffff
+denied-peer-ip=ff00::-ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff
+
+cert=/etc/letsencrypt/live/turn.example.com/fullchain.pem
+pkey=/etc/letsencrypt/live/turn.example.com/privkey.pem
+syslog
+no-stdout-log
+
+# On coturn releases that expose these current options, additionally enable:
+# unauthorized-ratelimit
+# unauthorized-ratelimit-rps=10
+# Do not enable server-relay, allow-loopback-peers, verbose packet logging,
+# the web admin, or the CLI on a public relay.

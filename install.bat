@@ -4,7 +4,7 @@
 
 @echo off
 REM Particle Masterserver - Installer (Windows)
-REM Installs dependencies directly with the system Python (no virtual environment).
+REM Creates an isolated virtual environment and installs the hash-locked runtime.
 REM Run this once (or again after requirements.txt changes). Use start.bat to run the server.
 
 cd /d "%~dp0"
@@ -25,10 +25,11 @@ if errorlevel 1 (
     exit /b 1
 )
 
-echo Installing dependencies...
-python -m pip install --upgrade pip
+echo Creating isolated Python environment...
+python -m venv .venv
 if errorlevel 1 goto :pipfail
-python -m pip install -r requirements.txt
+echo Installing hash-verified dependencies...
+.venv\Scripts\python.exe -m pip install --require-hashes --only-binary=:all: -r requirements.lock
 if errorlevel 1 goto :pipfail
 
 echo.

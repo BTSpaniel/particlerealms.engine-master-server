@@ -5,16 +5,15 @@
 @echo off
 REM Particle Masterserver - Launcher (Windows)
 REM Runs the server with the network-plan-recommended uvicorn flags
-REM (single worker, capped frame size, no access log), using the system
-REM Python (no virtual environment). Override the bind address/port with
+REM (single worker, capped frame size, no access log), using the isolated
+REM environment created by install.bat. Override the bind address/port with
 REM the PARTICLE_HOST / PARTICLE_PORT env vars.
 
 cd /d "%~dp0"
 
-where python >nul 2>nul
-if errorlevel 1 (
-    echo Error: Python is not installed or not in PATH
-    echo Run install.bat first, or install Python 3.11+ from https://www.python.org/
+if not exist ".venv\Scripts\python.exe" (
+    echo Error: .venv\Scripts\python.exe is unavailable
+    echo Run install.bat first.
     echo.
     pause
     exit /b 1
@@ -31,11 +30,14 @@ echo (Ctrl+C to stop)
 echo ======================================
 echo.
 
-python -m uvicorn app.main:app ^
+.venv\Scripts\python.exe -m uvicorn app.main:app ^
     --host %PARTICLE_HOST% --port %PARTICLE_PORT% ^
     --workers 1 --ws websockets ^
-    --ws-max-size 65536 --ws-ping-interval 25 --ws-ping-timeout 20 ^
-    --limit-concurrency 128 --no-access-log
+    --ws-max-size 65536 --ws-max-queue 16 --ws-ping-interval 25 --ws-ping-timeout 20 ^
+    --ws-per-message-deflate false --limit-concurrency 192 ^
+    --backlog 256 ^
+    --proxy-headers --forwarded-allow-ips 127.0.0.1 ^
+    --timeout-graceful-shutdown 20 --no-server-header --no-access-log
 
 if errorlevel 1 (
     echo.
