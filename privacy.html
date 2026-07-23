@@ -1,0 +1,62 @@
+<!--
+SPDX-FileCopyrightText: 2026 Jake Wehmeier (BTSpaniel) <https://github.com/BTSpaniel>
+
+SPDX-License-Identifier: LicenseRef-ParticleRealms-Alpha
+-->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WebGPU OS Companion Privacy Policy</title>
+  <style>
+    :root { color-scheme: dark; font: 16px/1.65 Inter, "Segoe UI", system-ui, sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin: 0; color: #e8edff; background: #080d1b; }
+    main { width: min(820px, calc(100% - 32px)); margin: 0 auto; padding: 48px 0 64px; }
+    h1, h2 { line-height: 1.2; }
+    h1 { margin: 0 0 8px; font-size: clamp(28px, 5vw, 44px); }
+    h2 { margin-top: 34px; color: #aebeff; font-size: 20px; }
+    p, li { color: #b8c2df; }
+    a { color: #82dbc9; }
+    .meta, .summary { color: #8d99bb; }
+    .summary { padding: 16px 18px; border: 1px solid #243052; border-radius: 12px; background: #0d1730; }
+    code { color: #c6d2ff; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>WebGPU OS Companion Privacy Policy</h1>
+    <p class="meta">Effective and last updated: July 22, 2026</p>
+    <p class="summary">WebGPU OS Companion processes browser and AI data only to provide features the user requests. The developer does not operate an analytics or data-collection server for this extension, does not sell user data, and does not use user data for advertising.</p>
+
+    <h2>What the extension processes</h2>
+    <ul>
+      <li><strong>Web browsing activity:</strong> tab URLs, titles, navigation events, and limited in-memory history only after the user enables Browsing activity. This data is returned to the WebGPU OS interface and is not sent to the developer.</li>
+      <li><strong>Website content:</strong> content selected for an explicit browser action, embedded-page compatibility, console messages from sites embedded in WebGPU OS, and screenshots requested by the user or an approved AI tool.</li>
+      <li><strong>Audio:</strong> audio from a tab only after Tab audio is enabled and the OS mixer requests capture. Captured audio is processed and replayed locally; it is not sent to the developer.</li>
+      <li><strong>Authentication information:</strong> API keys or an OpenRouter OAuth result that the user chooses to save. Credentials are encrypted with AES-GCM before local or session storage and are never exposed to the WebGPU OS page.</li>
+      <li><strong>AI request data:</strong> prompts, selected page content, files, images, audio, model choices, and request metadata that the user submits through WebGPU OS.</li>
+      <li><strong>Extension settings:</strong> capability choices, ad-protection state, counters, approved custom AI endpoints, and cached model metadata.</li>
+    </ul>
+
+    <h2>How data is used and shared</h2>
+    <p>Browser data is used only for the visible browser, automation, protection, and audio features the user enables. AI request data is transmitted directly from the extension to the AI provider or custom endpoint selected by the user so that provider can return the requested result. The provider processes that request under its own terms and privacy policy. The developer does not receive these requests or responses.</p>
+    <p>The extension does not sell data, transfer data for advertising, use data for creditworthiness or lending, or permit humans to read user data except where the user gives specific consent for support, where required for security or law, or where data is aggregated and anonymized for internal operations.</p>
+
+    <h2>Storage and retention</h2>
+    <p>Session credentials are stored in <code>chrome.storage.session</code> and clear when the browser session ends. Persistent credentials are stored only when the user chooses “Remember new credentials.” Credential envelopes are encrypted locally; the non-extractable encryption key is held by the browser in IndexedDB. Other settings and model metadata are stored in extension-local storage. Navigation history is held only in service-worker memory, is limited to 200 entries, and clears when that context ends.</p>
+    <p>Users can remove credentials in the Secure AI Vault, disable any capability in the extension popup, clear extension storage through Chrome, or uninstall the extension to remove locally stored extension data.</p>
+
+    <h2>Security and user control</h2>
+    <p>Sensitive capabilities are off by default. The extension accepts privileged requests only from the exact production origins <code>https://particlerealms.online</code> and <code>https://www.particlerealms.online</code>, plus the explicit development origins <code>http://localhost:9001</code> and <code>http://127.0.0.1:9001</code>. Other localhost ports are rejected. Browser JavaScript automation uses Chrome's User Scripts API and requires Chrome's separate “Allow User Scripts” control. Proxy requests reject private-network destinations and URL credentials.</p>
+
+    <h2>Chrome Web Store Limited Use</h2>
+    <p>The use of information received from Chrome APIs will adhere to the <a href="https://developer.chrome.com/docs/webstore/program-policies/user-data-faq" target="_blank" rel="noreferrer">Chrome Web Store User Data Policy</a>, including the Limited Use requirements.</p>
+
+    <h2>Changes and contact</h2>
+    <p>Material changes to data practices will be disclosed in the extension interface before the changed collection or use begins. Questions or privacy requests can be submitted to the project owner through <a href="https://github.com/BTSpaniel" target="_blank" rel="noreferrer">github.com/BTSpaniel</a>.</p>
+  </main>
+</body>
+</html>
